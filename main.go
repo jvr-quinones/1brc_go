@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -17,6 +18,7 @@ type StationSample struct {
 }
 
 var stationSamples map[string]*station.Station
+var stationNames []string
 
 func main() {
 	// Welcome to the One Billion Row Challenge in GO
@@ -24,30 +26,31 @@ func main() {
 
 	file := openFile("sample_big.txt")
 	stationSamples = make(map[string]*station.Station)
+	stationNames = make([]string, 0, 1000)
 	buffer := bufio.NewScanner(file)
 	buffer.Split(bufio.ScanLines)
 
 	t0 = time.Now()
 	for buffer.Scan() {
-		line := readFileLineV1(buffer)
-		sta := stationSamples[line.name]
+		sample := readFileLineV1(buffer)
 
-		if sta == nil {
-			stationSamples[line.name] = station.NewStation(line.val)
-			continue
-		} else if line.val < sta.Min {
-			sta.Min = line.val
-		} else if line.val > sta.Max {
-			sta.Max = line.val
+		if stationSamples[sample.name] != nil {
+			stationSamples[sample.name].AddSample(sample.val)
+		} else {
+			stationSamples[sample.name] = station.NewStation(sample.val)
 		}
 
-		sta.Acc += line.val
-		sta.Count++
+		ind, exist := slices.BinarySearch(stationNames, sample.name)
+		if len(stationNames) == 0 {
+			stationNames = append(stationNames, sample.name)
+		} else if !exist {
+			stationNames = slices.Insert(stationNames, ind, sample.name)
+		}
 	}
 	fmt.Printf("%v\n", time.Since(t0))
 
-	for k, v := range stationSamples {
-		fmt.Printf("%q: %v\n", k, v.PrintDetails())
+	for _, val := range stationNames {
+		fmt.Printf("%q: %v\n", val, stationSamples[val].PrintDetails())
 	}
 }
 
