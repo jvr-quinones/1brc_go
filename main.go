@@ -1,81 +1,80 @@
 package main
 
 import (
+	"1brc_go/readline"
 	"1brc_go/station"
 	"bufio"
+	"flag"
 	"fmt"
 	"log"
 	"os"
 	"slices"
-	"strconv"
-	"strings"
 	"time"
 )
 
-type StationSample struct {
-	name string
-	val  float32
-}
-
-var stationSamples map[string]*station.Station
-var stationNames []string
+var (
+	stationSamples map[string]*station.StationFloat
+	stationNames   []string
+)
 
 func main() {
 	// Welcome to the One Billion Row Challenge in GO
-	var t0 time.Time
 
-	file := openFile("sample_big.txt")
-	stationSamples = make(map[string]*station.Station)
-	stationNames = make([]string, 0, 1000)
+	fileName := readFlags()
+	file, err := os.Open(fileName)
+	if err != nil {
+		log.Fatalf("Error opening %q", fileName)
+	}
 	buffer := bufio.NewScanner(file)
 	buffer.Split(bufio.ScanLines)
 
-	t0 = time.Now()
-	for buffer.Scan() {
-		sample := readFileLineV1(buffer)
+	stationSamples = make(map[string]*station.StationFloat)
+	stationNames = make([]string, 0, 1000)
+	t0 := time.Now()
 
-		if stationSamples[sample.name] != nil {
-			stationSamples[sample.name].AddSample(sample.val)
-		} else {
-			stationSamples[sample.name] = station.NewStation(sample.val)
+	for line := 0; buffer.Scan(); line++ {
+		sample, err := readline.ReadAsFloat(buffer.Text())
+		if err != nil {
+			fmt.Println("Error reading line", line)
 		}
 
-		ind, exist := slices.BinarySearch(stationNames, sample.name)
+		if stationSamples[sample.Name] != nil {
+			stationSamples[sample.Name].AddSample(sample.Val)
+		} else {
+			stationSamples[sample.Name] = station.NewStationFloat(sample.Val)
+		}
+
+		ind, exist := slices.BinarySearch(stationNames, sample.Name)
 		if len(stationNames) == 0 {
-			stationNames = append(stationNames, sample.name)
+			stationNames = append(stationNames, sample.Name)
 		} else if !exist {
-			stationNames = slices.Insert(stationNames, ind, sample.name)
+			stationNames = slices.Insert(stationNames, ind, sample.Name)
 		}
 	}
 	fmt.Printf("%v\n", time.Since(t0))
 
 	for _, val := range stationNames {
-		fmt.Printf("%q: %v\n", val, stationSamples[val].PrintDetails())
+		details, err := stationSamples[val].PrintDetails()
+		if err != nil {
+			fmt.Printf("Error getting details for station %q\n", val)
+		}
+		fmt.Printf("%q: %v\n", val, details)
 	}
 }
 
-func readFileLineV1(buffer *bufio.Scanner) *StationSample {
-	text := buffer.Text()
-	// fmt.Println(string(text))
+func readFlags() string {
+	const largeFile = "samples_1b.txt"
+	const midFile = "samples_100M.txt"
+	const smallFile = "samples_100K.txt"
 
-	textArr := strings.Split(text, ";")
-	val, err := strconv.ParseFloat(textArr[1], 32)
-	if err != nil {
-		log.Fatalln("Error parsing line")
+	mid := flag.Bool("mid", false, "Program will use the 10% of the big file")
+	large := flag.Bool("large", false, "Program will use the small sample file")
+
+	if *large {
+		return largeFile
+	} else if *mid {
+		return midFile
+	} else {
+		return smallFile
 	}
-
-	content := StationSample{
-		name: textArr[0],
-		val:  float32(val),
-	}
-
-	return &content
-}
-
-func openFile(name string) *os.File {
-	file, err := os.Open(name)
-	if err != nil {
-		log.Fatalf("Error opening %q", name)
-	}
-	return file
 }
