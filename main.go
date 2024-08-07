@@ -33,22 +33,22 @@ func main() {
 	t0 := time.Now()
 
 	for line := 0; buffer.Scan(); line++ {
-		sample, err := readline.ReadAsFloat(buffer.Text())
+		name, val, err := readline.ReadAsFloat(buffer.Text())
 		if err != nil {
 			fmt.Println("Error reading line", line)
 		}
 
-		if stationSamples[sample.Name] != nil {
-			stationSamples[sample.Name].AddSample(sample.Val)
+		if stationSamples[name] != nil {
+			stationSamples[name].AddSample(val)
 		} else {
-			stationSamples[sample.Name] = station.NewStationFloat(sample.Val)
+			stationSamples[name] = station.NewStationFloat(val)
 		}
 
-		ind, exist := slices.BinarySearch(stationNames, sample.Name)
+		ind, exist := slices.BinarySearch(stationNames, name)
 		if len(stationNames) == 0 {
-			stationNames = append(stationNames, sample.Name)
+			stationNames = append(stationNames, name)
 		} else if !exist {
-			stationNames = slices.Insert(stationNames, ind, sample.Name)
+			stationNames = slices.Insert(stationNames, ind, name)
 		}
 	}
 	fmt.Printf("%v\n", time.Since(t0))

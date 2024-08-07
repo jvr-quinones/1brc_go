@@ -71,4 +71,5 @@ $RECYCLE.BIN/
 
 # End of https://www.toptal.com/developers/gitignore/api/windows,go,visualstudiocode
 *.txt
+!benchmarks/*.txt
 *.prof

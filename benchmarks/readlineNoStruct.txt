@@ -1,0 +1,8 @@
+goos: windows
+goarch: amd64
+pkg: 1brc_go/readline
+cpu: 11th Gen Intel(R) Core(TM) i7-11700K @ 3.60GHz
+BenchmarkReadFloat-16    	54155044	        21.43 ns/op	       0 B/op	       0 allocs/op
+BenchmarkReadInt-16      	100000000	        12.28 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	1brc_go/readline	2.749s

@@ -2,55 +2,38 @@ package readline
 
 import (
 	"errors"
-	"regexp"
 	"strconv"
 	"strings"
 )
 
-type ReadlineFloat struct {
-	Name string
-	Val  float64
-}
-
-type ReadlineInt struct {
-	Name string
-	Val  int64
-}
-
 const sep = ";"
 
-var (
-	ErrNoSep  = errors.New("no separator found")
-	findRegex = regexp.MustCompile(`(;\d+)\.`)
-)
+var ErrNoSep = errors.New("no separator found")
 
-func ReadAsFloat(str string) (*ReadlineFloat, error) {
+func ReadAsFloat(str string) (string, float64, error) {
 	strName, strVal, hasSep := strings.Cut(str, sep)
 	if !hasSep {
-		return nil, ErrNoSep
+		return "", 0.0, ErrNoSep
 	}
 
-	val, err := strconv.ParseFloat(strVal, 32)
+	val, err := strconv.ParseFloat(strVal, 64)
 	if err != nil {
-		return nil, err
+		return "", 0.0, err
 	}
 
-	return &ReadlineFloat{strName, val}, nil
+	return strName, val, nil
 }
 
-func ReadAsInt(str string) (*ReadlineInt, error) {
-	strName, strVal, hasSep := strings.Cut(
-		findRegex.ReplaceAllString(str, `$1`),
-		sep,
-	)
+func ReadAsInt(str string) (string, int64, error) {
+	strName, strVal, hasSep := strings.Cut(str, sep)
 	if !hasSep {
-		return nil, ErrNoSep
+		return "", 0, ErrNoSep
 	}
 
-	val, err := strconv.Atoi(strVal)
+	val, err := strconv.Atoi(strings.ReplaceAll(strVal, ".", ""))
 	if err != nil {
-		return nil, err
+		return "", 0, err
 	}
 
-	return &ReadlineInt{strName, int64(val)}, nil
+	return strName, int64(val), nil
 }
