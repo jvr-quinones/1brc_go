@@ -13,29 +13,27 @@ import (
 )
 
 var (
-	stationSamples map[string]*station.StationFloat
-	stationNames   []string
+	stationSamples = make(map[string]*station.StationFloat, 1000)
+	stationNames   = make([]string, 0, 1000)
 )
 
 func main() {
 	// Welcome to the One Billion Row Challenge in GO
 
 	fileName := readFlags()
-	file, err := os.Open(fileName)
-	if err != nil {
+	file, fileErr := os.Open(fileName)
+	if fileErr != nil {
 		log.Fatalf("Error opening %q", fileName)
 	}
 	buffer := bufio.NewScanner(file)
 	buffer.Split(bufio.ScanLines)
 
-	stationSamples = make(map[string]*station.StationFloat)
-	stationNames = make([]string, 0, 1000)
-	t0 := time.Now()
-
-	for line := 0; buffer.Scan(); line++ {
-		name, val, err := readline.ReadAsFloat(buffer.Text())
-		if err != nil {
+		t0 := time.Now()
+	for line := 1; buffer.Scan(); line++ {
+		name, val, readErr := readline.ReadAsFloat(buffer.Text())
+		if readErr != nil {
 			fmt.Println("Error reading line", line)
+continue
 		}
 
 		if stationSamples[name] != nil {
@@ -51,7 +49,7 @@ func main() {
 			stationNames = slices.Insert(stationNames, ind, name)
 		}
 	}
-	fmt.Printf("%v\n", time.Since(t0))
+	fmt.Printf("Read %v in %v??\r", fileName, time.Since(t0))
 
 	for _, val := range stationNames {
 		details, err := stationSamples[val].PrintDetails()
@@ -69,6 +67,7 @@ func readFlags() string {
 
 	mid := flag.Bool("mid", false, "Program will use the 10% of the big file")
 	large := flag.Bool("large", false, "Program will use the small sample file")
+	flag.Parse()
 
 	if *large {
 		return largeFile
