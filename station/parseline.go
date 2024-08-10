@@ -1,4 +1,4 @@
-package readline
+package station
 
 import (
 	"errors"
@@ -10,7 +10,7 @@ const sep = ";"
 
 var ErrNoSep = errors.New("no separator found")
 
-func ReadAsFloat(str string) (string, float64, error) {
+func ParseLineFloat(str string) (string, float64, error) {
 	strName, strVal, hasSep := strings.Cut(str, sep)
 	if !hasSep {
 		return "", 0.0, ErrNoSep
@@ -24,7 +24,7 @@ func ReadAsFloat(str string) (string, float64, error) {
 	return strName, val, nil
 }
 
-func ReadAsInt(str string) (string, int64, error) {
+func ParseLineInt(str string) (string, int64, error) {
 	strName, strVal, hasSep := strings.Cut(str, sep)
 	if !hasSep {
 		return "", 0, ErrNoSep

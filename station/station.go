@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-var ErrNoSep = errors.New("no elements counted")
+var ErrCountZero = errors.New("no elements counted")
 
 type StationFloat struct {
 	Acc   float64
@@ -33,9 +33,9 @@ func (s *StationFloat) AddSample(val float64) {
 	}
 }
 
-func (s *StationFloat) CalcAvg() (float64, error) {
+func (s StationFloat) CalcAvg() (float64, error) {
 	if s.Count == 0 {
-		return 0.0, ErrNoSep
+		return 0.0, ErrCountZero
 	}
 	return s.Acc / float64(s.Count), nil
 }
@@ -52,7 +52,7 @@ func (s1 *StationFloat) MergeStation(s2 *StationFloat) {
 	s1.Count += s2.Count
 }
 
-func (s *StationFloat) PrintDetails() (string, error) {
+func (s StationFloat) PrintDetails() (string, error) {
 	avg, err := s.CalcAvg()
 	if err != nil {
 		return "", err
@@ -91,9 +91,9 @@ func (s *StationInt) AddSample(val int64) {
 	}
 }
 
-func (s *StationInt) CalcAvg() (float64, error) {
+func (s StationInt) CalcAvg() (float64, error) {
 	if s.Count == 0 {
-		return 0.0, ErrNoSep
+		return 0.0, ErrCountZero
 	}
 	return float64(s.Acc) / float64(s.Count), nil
 }
@@ -110,7 +110,7 @@ func (s1 *StationInt) MergeStation(s2 *StationInt) {
 	s1.Count += s2.Count
 }
 
-func (s *StationInt) PrintDetails() (string, error) {
+func (s StationInt) PrintDetails() (string, error) {
 	avg, err := s.CalcAvg()
 	if err != nil {
 		return "", err

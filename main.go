@@ -1,7 +1,6 @@
 package main
 
 import (
-	"1brc_go/readline"
 	"1brc_go/station"
 	"bufio"
 	"flag"
@@ -19,6 +18,7 @@ var (
 
 func main() {
 	// Welcome to the One Billion Row Challenge in GO
+	var line int
 
 	fileName := readFlags()
 	file, fileErr := os.Open(fileName)
@@ -27,53 +27,51 @@ func main() {
 	}
 	buffer := bufio.NewScanner(file)
 	buffer.Split(bufio.ScanLines)
+	defer file.Close()
 
-		t0 := time.Now()
-	for line := 1; buffer.Scan(); line++ {
-		name, val, readErr := readline.ReadAsFloat(buffer.Text())
+	t0 := time.Now()
+	tick1s := time.NewTicker(time.Second)
+	for line = 0; buffer.Scan(); line++ {
+		name, val, readErr := station.ParseLineFloat(buffer.Text())
 		if readErr != nil {
-			fmt.Println("Error reading line", line)
-continue
-		}
-
-		if stationSamples[name] != nil {
+			fmt.Println("Error reading line", line+1)
+			continue
+		} else if stationSamples[name] != nil {
 			stationSamples[name].AddSample(val)
 		} else {
 			stationSamples[name] = station.NewStationFloat(val)
+			stationNames = append(stationNames, name)
+			slices.Sort(stationNames)
 		}
 
-		ind, exist := slices.BinarySearch(stationNames, name)
-		if len(stationNames) == 0 {
-			stationNames = append(stationNames, name)
-		} else if !exist {
-			stationNames = slices.Insert(stationNames, ind, name)
+		select {
+		case <-tick1s.C:
+			fmt.Fprintf(os.Stderr, "\r%d lines read", line)
+		default:
 		}
 	}
-	fmt.Printf("Read %v in %v??\r", fileName, time.Since(t0))
+	tick1s.Stop()
+	fmt.Fprintf(os.Stderr, "\r%d lines read in %.3fs", line, time.Since(t0).Seconds())
 
 	for _, val := range stationNames {
 		details, err := stationSamples[val].PrintDetails()
 		if err != nil {
 			fmt.Printf("Error getting details for station %q\n", val)
 		}
-		fmt.Printf("%q: %v\n", val, details)
+		fmt.Printf("%s: %v\n", val, details)
 	}
 }
 
 func readFlags() string {
-	const largeFile = "samples_1b.txt"
-	const midFile = "samples_100M.txt"
-	const smallFile = "samples_100K.txt"
-
 	mid := flag.Bool("mid", false, "Program will use the 10% of the big file")
 	large := flag.Bool("large", false, "Program will use the small sample file")
 	flag.Parse()
 
 	if *large {
-		return largeFile
+		return "samples_1B.txt"
 	} else if *mid {
-		return midFile
+		return "samples_100M.txt"
 	} else {
-		return smallFile
+		return "samples_100K.txt"
 	}
 }

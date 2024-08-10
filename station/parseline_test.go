@@ -1,7 +1,7 @@
-package readline_test
+package station_test
 
 import (
-	. "1brc_go/readline"
+	. "1brc_go/station"
 	"testing"
 )
 
@@ -19,9 +19,9 @@ var readlineTestArray = []readlineTest{
 	{"Test04;-4.0", -4.0, -40, nil},
 }
 
-func TestReadAsFloat(t *testing.T) {
+func TestParseLineFloat(t *testing.T) {
 	for _, test := range readlineTestArray {
-		_, actualFloat, actualErr := ReadAsFloat(test.text)
+		_, actualFloat, actualErr := ParseLineFloat(test.text)
 		if actualErr != test.expectErr || test.expectFloat != actualFloat {
 			t.Errorf("Error parsing %q: Got %f %v instead of %f %v",
 				test.text, actualFloat, actualErr, test.expectFloat, test.expectErr)
@@ -29,9 +29,9 @@ func TestReadAsFloat(t *testing.T) {
 	}
 }
 
-func TestReadAsInt(t *testing.T) {
+func TestParseLineInt(t *testing.T) {
 	for _, test := range readlineTestArray {
-		_, actualInt, actualErr := ReadAsInt(test.text)
+		_, actualInt, actualErr := ParseLineInt(test.text)
 		if actualErr != test.expectErr || test.expectInt != actualInt {
 			t.Errorf("Error parsing %q: Got %d %v instead of %d %v",
 				test.text, actualInt, actualErr, test.expectInt, test.expectErr)
@@ -39,17 +39,17 @@ func TestReadAsInt(t *testing.T) {
 	}
 }
 
-func BenchmarkReadFloat(b *testing.B) {
+func BenchmarkParseLineFloat(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		if _, _, err := ReadAsFloat("Las Palmas de Gran Canaria;31.4"); err != nil {
+		if _, _, err := ParseLineFloat("Las Palmas de Gran Canaria;31.4"); err != nil {
 			b.Fatal(err)
 		}
 	}
 }
 
-func BenchmarkReadInt(b *testing.B) {
+func BenchmarkParseLineInt(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		if _, _, err := ReadAsInt("Yakutsk;-347"); err != nil {
+		if _, _, err := ParseLineInt("Yakutsk;-347"); err != nil {
 			b.Fatal(err)
 		}
 	}
