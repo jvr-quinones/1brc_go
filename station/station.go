@@ -8,12 +8,17 @@ import (
 var ErrCountZero = errors.New("no elements counted")
 
 type StationFloat struct {
-	Acc   float64
+	// Accumulated Total
+	Acc float64
+	// Number of Samples
 	Count uint64
-	Min   float64
-	Max   float64
+	// Smallest Sample
+	Min float64
+	// Largest Sample
+	Max float64
 }
 
+// Creates a new station object
 func NewStationFloat(val float64) *StationFloat {
 	return &StationFloat{
 		Acc:   val,
@@ -23,6 +28,7 @@ func NewStationFloat(val float64) *StationFloat {
 	}
 }
 
+// Adds one sample to an existing station
 func (s *StationFloat) AddSample(val float64) {
 	s.Acc += val
 	s.Count++
@@ -33,6 +39,7 @@ func (s *StationFloat) AddSample(val float64) {
 	}
 }
 
+// Calculates the average of all the samples accumulated
 func (s StationFloat) CalcAvg() (float64, error) {
 	if s.Count == 0 {
 		return 0.0, ErrCountZero
@@ -40,6 +47,7 @@ func (s StationFloat) CalcAvg() (float64, error) {
 	return s.Acc / float64(s.Count), nil
 }
 
+// Combines two stations into one
 func (s1 *StationFloat) MergeStation(s2 *StationFloat) {
 	if s2 == nil {
 		return
@@ -52,6 +60,7 @@ func (s1 *StationFloat) MergeStation(s2 *StationFloat) {
 	s1.Count += s2.Count
 }
 
+// Prints the average, minimum and maximum of the station
 func (s StationFloat) PrintDetails() (string, error) {
 	avg, err := s.CalcAvg()
 	if err != nil {
@@ -72,6 +81,7 @@ type StationInt struct {
 	Max   int64
 }
 
+// Creates a new station object
 func NewStationInt(val int64) *StationInt {
 	return &StationInt{
 		Acc:   val,
@@ -81,6 +91,7 @@ func NewStationInt(val int64) *StationInt {
 	}
 }
 
+// Adds one sample to an existing station
 func (s *StationInt) AddSample(val int64) {
 	s.Acc += val
 	s.Count++
@@ -91,6 +102,7 @@ func (s *StationInt) AddSample(val int64) {
 	}
 }
 
+// Calculates the average of all the samples accumulated
 func (s StationInt) CalcAvg() (float64, error) {
 	if s.Count == 0 {
 		return 0.0, ErrCountZero
@@ -98,6 +110,7 @@ func (s StationInt) CalcAvg() (float64, error) {
 	return float64(s.Acc) / float64(s.Count), nil
 }
 
+// Combines two stations into one
 func (s1 *StationInt) MergeStation(s2 *StationInt) {
 	if s2 == nil {
 		return
@@ -110,6 +123,7 @@ func (s1 *StationInt) MergeStation(s2 *StationInt) {
 	s1.Count += s2.Count
 }
 
+// Prints the average, minimum and maximum of the station
 func (s StationInt) PrintDetails() (string, error) {
 	avg, err := s.CalcAvg()
 	if err != nil {
