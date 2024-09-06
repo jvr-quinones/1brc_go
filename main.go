@@ -7,18 +7,18 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"slices"
+	"sync"
 	"time"
 )
 
 var (
-	stationSamples = make(map[string]*station.StationFloat, 1000)
-	stationNames   = make([]string, 0, 1000)
+	stationSamples sync.Map
+	stationNames   = make(station.StringHeap, 0, 1000)
 )
 
 func main() {
 	// Welcome to the One Billion Row Challenge in GO
-	var line int
+	var line uint64
 
 	fileName := readFlags()
 	file, fileErr := os.Open(fileName)
@@ -29,37 +29,44 @@ func main() {
 	buffer.Split(bufio.ScanLines)
 	defer file.Close()
 
+	cores := 8
 	t0 := time.Now()
 	tick1s := time.NewTicker(time.Second)
-	for line = 0; buffer.Scan(); line++ {
-		name, val, readErr := station.ParseLineFloat(buffer.Text())
-		if readErr != nil {
-			fmt.Println("Error reading line", line+1)
-			continue
-		} else if stationSamples[name] != nil {
-			stationSamples[name].AddSample(val)
-		} else {
-			stationSamples[name] = station.NewStationFloat(val)
-			stationNames = append(stationNames, name)
-			slices.Sort(stationNames)
-		}
+	sampleCh := make(chan string, cores*1e6)
+	fmt.Fprintf(os.Stderr, "Using %d core(s)\n", cores)
 
+	for range cores {
+		go worker(sampleCh, &stationSamples)
+	}
+
+	for line = 0; buffer.Scan(); line++ {
+		sampleCh <- buffer.Text()
 		select {
 		case <-tick1s.C:
-			fmt.Fprintf(os.Stderr, "\r%d lines read", line)
+			fmt.Fprintf(os.Stderr, "\rlen: %d, line: %d", len(sampleCh), line)
 		default:
 		}
 	}
-	tick1s.Stop()
 	fmt.Fprintf(os.Stderr, "\r%d lines read in %.3fs", line, time.Since(t0).Seconds())
+	tick1s.Stop()
+	close(sampleCh)
 
-	for _, val := range stationNames {
-		details, err := stationSamples[val].PrintDetails()
+	stationSamples.Range(func(k any, v any) bool {
+		details, err := v.(*station.StationFloat).PrintDetails()
 		if err != nil {
-			fmt.Printf("Error getting details for station %q\n", val)
+			fmt.Printf("Could not print details for stations %q", k.(string))
+		} else {
+			fmt.Println(k.(string), details)
 		}
-		fmt.Printf("%s: %v\n", val, details)
-	}
+		return true
+	})
+	// for _, val := range stationNames {
+	// 	details, err := stationSamples[val].PrintDetails()
+	// 	if err != nil {
+	// 		fmt.Printf("Error getting details for station %q\n", val)
+	// 	}
+	// 	fmt.Printf("%s: %v\n", val, details)
+	// }
 }
 
 func readFlags() string {
@@ -73,5 +80,27 @@ func readFlags() string {
 		return "samples_100M.txt"
 	} else {
 		return "samples_100K.txt"
+	}
+}
+
+type StationSample struct {
+	number uint64
+	text   string
+}
+
+func worker(sampleCh <-chan string, pSyncMap *sync.Map) {
+	for sample := range sampleCh {
+		name, val, err := station.ParseLineFloat(sample)
+		if err != nil {
+			// fmt.Println("Error reading line", sample.number)
+			continue
+		}
+
+		pStation, _ := pSyncMap.Load(name)
+		if pStation != nil {
+			pStation.(*station.StationFloat).AddSample(val)
+		} else {
+			pSyncMap.Store(name, station.NewStationFloat(val))
+		}
 	}
 }
