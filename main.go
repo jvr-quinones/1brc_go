@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"runtime"
 	"sync"
 	"time"
 )
@@ -18,12 +19,13 @@ func main() {
 	var (
 		// stationNames   = make(station.StringHeap, 0, 1000)
 		line      uint64
-		workersCh []chan string
+		prevLine  uint64 = 0
+		workersCh chan []string
 		wg        = &sync.WaitGroup{}
-		cores     = 1 // runtime.NumCPU()
+		cores     = runtime.NumCPU() - 1
 	)
 	const (
-		bufSize = 1e3
+		bufSize uint64 = 3e3
 	)
 
 	fileName := readFlags()
@@ -35,28 +37,34 @@ func main() {
 	buffer.Split(bufio.ScanLines)
 	defer file.Close()
 
-	workersCh = make([]chan string, cores)
-	for i := range cores {
-		ch := make(chan string, bufSize)
+	workersCh = make(chan []string, cores)
+	for range cores {
 		wg.Add(1)
-		go parseSample(ch, wg)
-		workersCh[i] = ch
+		go parseSample(workersCh, wg)
 	}
 
 	t0 := time.Now()
 	tick1s := time.NewTicker(time.Second)
-	for line = 0; buffer.Scan(); line++ {
-		workersCh[line%uint64(cores)] <- buffer.Text()
+	strArray := make([]string, bufSize)
+	nextScan := buffer.Scan()
+
+	for line = 0; nextScan; line++ {
+		if (line%bufSize == 0 && line > 0) || !nextScan {
+			workersCh <- strArray
+		}
+		strArray[line%bufSize] = buffer.Text()
+		nextScan = buffer.Scan()
+
 		select {
 		case <-tick1s.C:
-			fmt.Fprintf(os.Stderr, "\rline: %d", line)
+			fmt.Fprintf(os.Stderr, "\r%d lines/sec", line-prevLine)
+			prevLine = line
 		default:
 		}
 	}
+
 	tick1s.Stop()
-	for i := range cores {
-		close(workersCh[i])
-	}
+	close(workersCh)
 	wg.Wait()
 	fmt.Fprintf(os.Stderr, "\r%d lines read in %.3fs", line, time.Since(t0).Seconds())
 
@@ -80,32 +88,31 @@ func main() {
 }
 
 func readFlags() string {
-	mid := flag.Bool("mid", false, "Program will use the 10% of the big file")
 	large := flag.Bool("large", false, "Program will use the small sample file")
 	flag.Parse()
 
 	if *large {
 		return "samples_1B.txt"
-	} else if *mid {
-		return "samples_100M.txt"
 	} else {
-		return "samples_100K.txt"
+		return "samples_100M.txt"
 	}
 }
 
-func parseSample(strCh <-chan string, wg *sync.WaitGroup) {
-	for sample := range strCh {
-		name, val, err := station.ParseLineFloat(sample)
-		if err != nil {
-			// fmt.Println("Error reading line", sample.number)
-			continue
-		}
+func parseSample(strCh <-chan []string, wg *sync.WaitGroup) {
+	for array := range strCh {
+		for _, sample := range array {
+			name, val, err := station.ParseLineFloat(sample)
+			if err != nil {
+				// fmt.Println("Error reading line", sample.number)
+				continue
+			}
 
-		pStation, _ := stationSamples.Load(name)
-		if pStation != nil {
-			pStation.(*station.StationFloat).AddSample(val)
-		} else {
-			stationSamples.Store(name, station.NewStationFloat(val))
+			pStation, _ := stationSamples.Load(name)
+			if pStation != nil {
+				pStation.(*station.StationFloat).AddSample(val)
+			} else {
+				stationSamples.Store(name, station.NewStationFloat(val))
+			}
 		}
 	}
 	wg.Done()
