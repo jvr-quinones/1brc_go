@@ -7,15 +7,21 @@ import (
 
 var ErrCountZero = errors.New("no elements counted")
 
-type StationFloat struct {
-	Acc   float64
+// An accumulator object that stores the values (except the Count) in float64
+type AccumulatorFloat struct {
+	// Accumulated Total
+	Acc float64
+	// Number of Samples
 	Count uint64
-	Min   float64
-	Max   float64
+	// Smallest Sample
+	Min float64
+	// Largest Sample
+	Max float64
 }
 
-func NewStationFloat(val float64) *StationFloat {
-	return &StationFloat{
+// Creates a new accumulator object
+func NewAccumulatorFloat(val float64) *AccumulatorFloat {
+	return &AccumulatorFloat{
 		Acc:   val,
 		Count: 1,
 		Min:   val,
@@ -23,7 +29,8 @@ func NewStationFloat(val float64) *StationFloat {
 	}
 }
 
-func (s *StationFloat) AddSample(val float64) {
+// Adds one sample to an existing station accumulator
+func (s *AccumulatorFloat) AddSample(val float64) {
 	s.Acc += val
 	s.Count++
 	if val < s.Min {
@@ -33,14 +40,16 @@ func (s *StationFloat) AddSample(val float64) {
 	}
 }
 
-func (s StationFloat) CalcAvg() (float64, error) {
+// Calculates the average of all the samples accumulated
+func (s AccumulatorFloat) CalcAvg() (float64, error) {
 	if s.Count == 0 {
 		return 0.0, ErrCountZero
 	}
 	return s.Acc / float64(s.Count), nil
 }
 
-func (s1 *StationFloat) MergeStation(s2 *StationFloat) {
+// Combines two accumulators into one
+func (s1 *AccumulatorFloat) MergeAccumulator(s2 *AccumulatorFloat) {
 	if s2 == nil {
 		return
 	} else if s2.Min < s1.Min {
@@ -52,28 +61,31 @@ func (s1 *StationFloat) MergeStation(s2 *StationFloat) {
 	s1.Count += s2.Count
 }
 
-func (s StationFloat) PrintDetails() (string, error) {
+// Prints the average, minimum and maximum of the station
+func (s AccumulatorFloat) PrintDetails() (string, error) {
 	avg, err := s.CalcAvg()
 	if err != nil {
 		return "", err
 	}
 	return fmt.Sprintf(
-		"Avg: %.1f, Min: %.1f, Max: %.1f",
+		"%.1f/%.1f/%.1f",
 		avg,
 		s.Min,
 		s.Max,
 	), nil
 }
 
-type StationInt struct {
+// An accumulator object that stores the values (except the Count) in int64
+type AccumulatorInt struct {
 	Acc   int64
 	Count uint64
 	Min   int64
 	Max   int64
 }
 
-func NewStationInt(val int64) *StationInt {
-	return &StationInt{
+// Creates a new accumulator object
+func NewAccumulatorInt(val int64) *AccumulatorInt {
+	return &AccumulatorInt{
 		Acc:   val,
 		Count: 1,
 		Min:   val,
@@ -81,7 +93,8 @@ func NewStationInt(val int64) *StationInt {
 	}
 }
 
-func (s *StationInt) AddSample(val int64) {
+// Adds one sample to an existing station accumulator
+func (s *AccumulatorInt) AddSample(val int64) {
 	s.Acc += val
 	s.Count++
 	if val < s.Min {
@@ -91,14 +104,16 @@ func (s *StationInt) AddSample(val int64) {
 	}
 }
 
-func (s StationInt) CalcAvg() (float64, error) {
+// Calculates the average of all the samples accumulated
+func (s AccumulatorInt) CalcAvg() (float64, error) {
 	if s.Count == 0 {
 		return 0.0, ErrCountZero
 	}
 	return float64(s.Acc) / float64(s.Count), nil
 }
 
-func (s1 *StationInt) MergeStation(s2 *StationInt) {
+// Combines two accumulators into one
+func (s1 *AccumulatorInt) MergeAccumulator(s2 *AccumulatorInt) {
 	if s2 == nil {
 		return
 	} else if s2.Min < s1.Min {
@@ -110,13 +125,14 @@ func (s1 *StationInt) MergeStation(s2 *StationInt) {
 	s1.Count += s2.Count
 }
 
-func (s StationInt) PrintDetails() (string, error) {
+// Prints the average, minimum and maximum of the station
+func (s AccumulatorInt) PrintDetails() (string, error) {
 	avg, err := s.CalcAvg()
 	if err != nil {
 		return "", err
 	}
 	return fmt.Sprintf(
-		"Avg: %.1f, Min: %.1f, Max: %.1f",
+		"%.1f/%.1f/%.1f",
 		avg/10.0,
 		float64(s.Min),
 		float64(s.Max),

@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	stationSamples = make(map[string]*station.StationFloat, 1000)
+	stationSamples = make(map[string]*station.AccumulatorFloat, 1000)
 	stationNames   = make([]string, 0, 1000)
 )
 
@@ -39,7 +39,7 @@ func main() {
 		} else if stationSamples[name] != nil {
 			stationSamples[name].AddSample(val)
 		} else {
-			stationSamples[name] = station.NewStationFloat(val)
+			stationSamples[name] = station.NewAccumulatorFloat(val)
 			stationNames = append(stationNames, name)
 			slices.Sort(stationNames)
 		}
