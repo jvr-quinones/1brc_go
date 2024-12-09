@@ -63,16 +63,17 @@ func (s1 *AccumulatorFloat) MergeAccumulator(s2 *AccumulatorFloat) {
 
 // Prints the average, minimum and maximum of the station
 func (s AccumulatorFloat) PrintDetails() (string, error) {
+	var str string
 	avg, err := s.CalcAvg()
-	if err != nil {
-		return "", err
+	if err == nil {
+		str = fmt.Sprintf(
+			"%.1f/%.1f/%.1f",
+			avg,
+			s.Min,
+			s.Max,
+		)
 	}
-	return fmt.Sprintf(
-		"%.1f/%.1f/%.1f",
-		avg,
-		s.Min,
-		s.Max,
-	), nil
+	return str, err
 }
 
 // An accumulator object that stores the values (except the Count) in int64
@@ -121,20 +122,21 @@ func (s1 *AccumulatorInt) MergeAccumulator(s2 *AccumulatorInt) {
 	} else if s2.Max > s1.Max {
 		s1.Max = s2.Max
 	}
-	s1.Acc += s2.Max
+	s1.Acc += s2.Acc
 	s1.Count += s2.Count
 }
 
 // Prints the average, minimum and maximum of the station
 func (s AccumulatorInt) PrintDetails() (string, error) {
+	var str string
 	avg, err := s.CalcAvg()
-	if err != nil {
-		return "", err
+	if err == nil {
+		str = fmt.Sprintf(
+			"%.1f/%.1f/%.1f",
+			avg/10.0,
+			float64(s.Min),
+			float64(s.Max),
+		)
 	}
-	return fmt.Sprintf(
-		"%.1f/%.1f/%.1f",
-		avg/10.0,
-		float64(s.Min),
-		float64(s.Max),
-	), nil
+	return str, err
 }
