@@ -3,29 +3,26 @@ package main
 import (
 	"1brc_go/station"
 	"bufio"
+	"bytes"
 	"flag"
 	"fmt"
 	"log"
 	"os"
 	"runtime"
+	"slices"
 	"sync"
 	"time"
 )
 
-var stationSamples sync.Map
+// var stationSamples sync.Map
 
 func main() {
 	// Welcome to the One Billion Row Challenge in GO
 	var (
-		// stationNames   = make(station.StringHeap, 0, 1000)
-		line      uint64
-		prevLine  uint64 = 0
-		workersCh chan []string
-		wg        = &sync.WaitGroup{}
-		cores     = runtime.NumCPU() - 1
-	)
-	const (
-		bufSize uint64 = 3e3
+		bufSize   int64
+		cores     = int64(runtime.NumCPU())
+		ptr       int64
+		ptrOffset int64
 	)
 
 	fileName := readFlags()
@@ -33,87 +30,89 @@ func main() {
 	if fileErr != nil {
 		log.Fatalf("Error opening %q", fileName)
 	}
-	buffer := bufio.NewScanner(file)
-	buffer.Split(bufio.ScanLines)
 	defer file.Close()
 
-	workersCh = make(chan []string, cores)
-	for range cores {
-		wg.Add(1)
-		go parseSample(workersCh, wg)
+	stat, err := file.Stat()
+	if err != nil {
+		log.Fatalf("Error reading %q statistics", fileName)
 	}
+	bufSize = stat.Size() / cores
+	log.Println("Number of cores:", cores)
+	log.Println("Buffer size:", bufSize)
 
+	buf := make([]byte, bufSize)
+	samples := make(chan map[string]*station.AccumulatorFloat, cores)
+	wg := &sync.WaitGroup{}
 	t0 := time.Now()
-	tick1s := time.NewTicker(time.Second)
-	strArray := make([]string, bufSize)
-	nextScan := buffer.Scan()
-
-	for line = 0; nextScan; line++ {
-		if (line%bufSize == 0 && line > 0) || !nextScan {
-			workersCh <- strArray
+	for range cores {
+		_, err := file.ReadAt(buf, ptr)
+		if err != nil {
+			log.Fatal("Error reading buffer:", err)
 		}
-		strArray[line%bufSize] = buffer.Text()
-		nextScan = buffer.Scan()
-
-		select {
-		case <-tick1s.C:
-			fmt.Fprintf(os.Stderr, "\r%d lines/sec", line-prevLine)
-			prevLine = line
-		default:
-		}
+		ptrOffset = int64(bytes.LastIndexByte(buf, '\n'))
+		go parseSample(bytes.Clone(buf[:ptrOffset]), samples, wg)
+		wg.Add(1)
+		ptr += ptrOffset + 1
+		log.Printf("%d bytes read, %d%%", ptrOffset, ptr*100/stat.Size())
 	}
 
-	tick1s.Stop()
-	close(workersCh)
 	wg.Wait()
-	fmt.Fprintf(os.Stderr, "\r%d lines read in %.3fs", line, time.Since(t0).Seconds())
-
-	stationSamples.Range(func(k any, v any) bool {
-		details, err := v.(*station.StationFloat).PrintDetails()
-		if err != nil {
-			fmt.Printf("Could not print details for stations %q", k.(string))
-		} else {
-			fmt.Println(k.(string), details)
+	close(samples)
+	res := make(map[string]*station.AccumulatorFloat, 1000)
+	names := make([]string, 0, 1000)
+	for s := range samples {
+		for k, v := range s {
+			if res[k] == nil {
+				res[k] = v
+				names = append(names, k)
+			} else {
+				res[k].MergeAccumulator(v)
+			}
 		}
-		return true
-	})
+	}
+	slices.Sort(names)
+	log.Printf("Time processing data: %v", time.Since(t0))
 
-	// for _, val := range stationNames {
-	// 	details, err := stationSamples[val].PrintDetails()
-	// 	if err != nil {
-	// 		fmt.Printf("Error getting details for station %q\n", val)
-	// 	}
-	// 	fmt.Printf("%s: %v\n", val, details)
-	// }
+	for _, val := range names {
+		details, err := res[val].PrintDetails()
+		if err != nil {
+			fmt.Printf("Error getting details for station %q\n", val)
+		}
+		fmt.Printf("%s: %v\n", val, details)
+	}
 }
 
 func readFlags() string {
-	large := flag.Bool("large", false, "Program will use the small sample file")
+	mid := flag.Bool("large", false, "Program will use the 100M sample file")
 	flag.Parse()
 
-	if *large {
-		return "samples_1B.txt"
-	} else {
+	if *mid {
 		return "samples_100M.txt"
+	} else {
+		return "samples_1B.txt"
 	}
 }
 
-func parseSample(strCh <-chan []string, wg *sync.WaitGroup) {
-	for array := range strCh {
-		for _, sample := range array {
-			name, val, err := station.ParseLineFloat(sample)
-			if err != nil {
-				// fmt.Println("Error reading line", sample.number)
-				continue
-			}
+func parseSample(
+	sl []byte, ch chan<- map[string]*station.AccumulatorFloat, wg *sync.WaitGroup,
+) {
+	m := make(map[string]*station.AccumulatorFloat, 1000)
 
-			pStation, _ := stationSamples.Load(name)
-			if pStation != nil {
-				pStation.(*station.StationFloat).AddSample(val)
-			} else {
-				stationSamples.Store(name, station.NewStationFloat(val))
-			}
+	buf := bufio.NewScanner(bytes.NewReader(sl))
+	buf.Split(bufio.ScanLines)
+	for buf.Scan() {
+		name, val, err := station.ParseLineFloat(buf.Text())
+		if err != nil {
+			continue
+		}
+
+		if m[name] == nil {
+			m[name] = station.NewAccumulatorFloat(val)
+		} else {
+			m[name].AddSample(val)
 		}
 	}
+
+	ch <- m
 	wg.Done()
 }
