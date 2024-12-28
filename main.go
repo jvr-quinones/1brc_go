@@ -15,25 +15,22 @@ import (
 	"time"
 )
 
-type section struct {
-	start  uint64
-	offset uint64
+type dataProcessor struct {
+	raw     chan *io.SectionReader
+	refined chan map[string]*station.AccumulatorFloat
+	group   *sync.WaitGroup
 }
 
-type processor struct {
-	in  chan section
-	out chan map[string]*station.AccumulatorFloat
-	wg  *sync.WaitGroup
-}
+const MB = 1048576
 
 // var stationSamples sync.Map
 
 func main() {
 	// Welcome to the One Billion Row Challenge in GO
 	var (
-		start     uint64
-		end       uint64
-		processor processor
+		start  uint64
+		offset uint64
+		proc   dataProcessor
 	)
 
 	fileName, bufSize, threads := readFlags()
@@ -46,52 +43,49 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error reading %q statistics", fileName)
 	}
-	fileSize := uint64(stat.Size())
 
-	if bufSize == 0 {
-		bufSize = fileSize / threads
-	} else {
-		bufSize *= 1048576
-	}
+	fileSize := uint64(stat.Size())
+	bufSize = max(bufSize*MB, MB)
+	buf := make([]byte, bufSize)
+
 	loops := fileSize / bufSize
 	if fileSize%bufSize > 0 {
 		loops++
 	}
-	buf := make([]byte, bufSize)
-	processor.in = make(chan section, loops)
-	processor.out = make(chan map[string]*station.AccumulatorFloat, loops)
-	processor.wg = &sync.WaitGroup{}
+	proc = dataProcessor{
+		raw:     make(chan *io.SectionReader, loops),
+		refined: make(chan map[string]*station.AccumulatorFloat, loops),
+		group:   &sync.WaitGroup{},
+	}
+
 	log.Println("File:", fileName)
 	log.Println("Number of cores:", threads)
 	log.Println("Buffer size:", bufSize)
 
 	t0 := time.Now()
 	for range threads {
-		go parseSample(file, processor)
-		processor.wg.Add(1)
+		go parseSample(bufSize, proc)
+		proc.group.Add(1)
 	}
 	for range loops {
 		_, err := file.ReadAt(buf, int64(start))
 		if err != nil && err != io.EOF {
 			log.Fatal("Error reading buffer:", err)
 		}
-		end = uint64(bytes.LastIndexByte(buf, '\n'))
-		processor.in <- section{
-			start:  start,
-			offset: end,
-		}
-		start += end + 1
-		perc := start * 100 / uint64(stat.Size())
-		fmt.Fprintf(os.Stderr, "\t\r%d bytes read, %d%%", end, perc)
+		offset = uint64(bytes.LastIndexByte(buf, '\n'))
+		proc.raw <- io.NewSectionReader(file, int64(start), int64(offset))
+		start += offset + 1
+		perc := start * 100 / fileSize
+		fmt.Fprintf(os.Stderr, "\t\r%d bytes read, %d%%", start, perc)
 	}
 
-	close(processor.in)
+	close(proc.raw)
 	fmt.Fprint(os.Stderr, "\n")
-	processor.wg.Wait()
-	close(processor.out)
+	proc.group.Wait()
+	close(proc.refined)
 	res := make(map[string]*station.AccumulatorFloat, 1000)
 	names := make([]string, 0, 1000)
-	for s := range processor.out {
+	for s := range proc.refined {
 		for k, v := range s {
 			if res[k] == nil {
 				res[k] = v
@@ -115,7 +109,7 @@ func main() {
 
 func readFlags() (string, uint64, uint64) {
 	var filePath string
-	mid := flag.Bool("large", false, "Program will use the 100M sample file")
+	mid := flag.Bool("mid", false, "Program will use the 100M sample file")
 	bufSize := flag.Uint64("buffer-size", 0, "Maximum buffer size per thread in MB")
 	threads := flag.Uint64("threads", uint64(runtime.NumCPU()), "Maximum number of threads used by the app")
 	flag.Parse()
@@ -128,31 +122,29 @@ func readFlags() (string, uint64, uint64) {
 	return filePath, *bufSize, max(*threads, 1)
 }
 
-func parseSample(
-	file io.ReaderAt,
-	data processor,
-) {
-	m := make(map[string]*station.AccumulatorFloat, 1000)
+func parseSample(bufSize uint64, dp dataProcessor) {
+	buf := make([]byte, bufSize)
 
-	for pointer := range data.in {
-		slice := make([]byte, pointer.offset)
-		file.ReadAt(slice, int64(pointer.start))
-		buf := bufio.NewScanner(bytes.NewReader(slice))
-		buf.Split(bufio.ScanLines)
-		for buf.Scan() {
-			name, val, err := station.ParseLineFloat(buf.Text())
+	for sec := range dp.raw {
+		sta := make(map[string]*station.AccumulatorFloat, 1000)
+		scn := bufio.NewScanner(sec)
+		scn.Buffer(buf, bufio.MaxScanTokenSize)
+		scn.Split(bufio.ScanLines)
+
+		for scn.Scan() {
+			name, val, err := station.ParseLineFloat(scn.Text())
 			if err != nil {
 				continue
 			}
 
-			if m[name] == nil {
-				m[name] = station.NewAccumulatorFloat(val)
+			if sta[name] == nil {
+				sta[name] = station.NewAccumulatorFloat(val)
 			} else {
-				m[name].AddSample(val)
+				sta[name].AddSample(val)
 			}
 		}
 
-		data.out <- m
+		dp.refined <- sta
 	}
-	data.wg.Done()
+	dp.group.Done()
 }
