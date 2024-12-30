@@ -16,17 +16,15 @@ import (
 )
 
 type dataProcessor struct {
-	raw     chan *io.SectionReader
-	refined chan map[string]*station.AccumulatorFloat
-	group   *sync.WaitGroup
+	raw   chan *io.SectionReader
+	group *sync.WaitGroup
 }
 
 const MB = 1048576
 
-// var stationSamples sync.Map
+var samples sync.Map
 
 func main() {
-	// Welcome to the One Billion Row Challenge in GO
 	var (
 		start  uint64
 		offset uint64
@@ -53,18 +51,18 @@ func main() {
 		loops++
 	}
 	proc = dataProcessor{
-		raw:     make(chan *io.SectionReader, loops),
-		refined: make(chan map[string]*station.AccumulatorFloat, loops),
-		group:   &sync.WaitGroup{},
+		raw:   make(chan *io.SectionReader, loops),
+		group: &sync.WaitGroup{},
 	}
 
+	log.Println("Welcome to the One Billion Row Challenge in GO")
 	log.Println("File:", fileName)
 	log.Println("Number of cores:", threads)
 	log.Println("Buffer size:", bufSize)
 
 	t0 := time.Now()
 	for range threads {
-		go parseSample(bufSize, proc)
+		go parseSample(bufSize, proc, &samples)
 		proc.group.Add(1)
 	}
 	for range loops {
@@ -82,28 +80,26 @@ func main() {
 	close(proc.raw)
 	fmt.Fprint(os.Stderr, "\n")
 	proc.group.Wait()
-	close(proc.refined)
-	res := make(map[string]*station.AccumulatorFloat, 1000)
 	names := make([]string, 0, 1000)
-	for s := range proc.refined {
-		for k, v := range s {
-			if res[k] == nil {
-				res[k] = v
-				names = append(names, k)
-			} else {
-				res[k].MergeAccumulator(v)
-			}
-		}
-	}
+	samples.Range(func(k any, _ any) bool {
+		names = append(names, k.(string))
+		return true
+	})
 	slices.Sort(names)
 	log.Printf("Time processing data: %v", time.Since(t0))
 
-	for _, val := range names {
-		details, err := res[val].PrintDetails()
-		if err != nil {
-			fmt.Printf("Error getting details for station %q\n", val)
+	for _, name := range names {
+		sta, isLoaded := samples.Load(name)
+		if !isLoaded {
+			log.Printf("Error getting details for station %q\n", name)
+			continue
 		}
-		fmt.Printf("%s: %v\n", val, details)
+		details, err := sta.(*station.AccumulatorFloat).PrintDetails()
+		if err != nil {
+			log.Printf("Error getting details for station %q\n", name)
+			continue
+		}
+		fmt.Printf("%s: %v\n", name, details)
 	}
 }
 
@@ -122,11 +118,10 @@ func readFlags() (string, uint64, uint64) {
 	return filePath, *bufSize, max(*threads, 1)
 }
 
-func parseSample(bufSize uint64, dp dataProcessor) {
+func parseSample(bufSize uint64, dp dataProcessor, sta *sync.Map) {
 	buf := make([]byte, bufSize)
 
 	for sec := range dp.raw {
-		sta := make(map[string]*station.AccumulatorFloat, 1000)
 		scn := bufio.NewScanner(sec)
 		scn.Buffer(buf, bufio.MaxScanTokenSize)
 		scn.Split(bufio.ScanLines)
@@ -137,14 +132,13 @@ func parseSample(bufSize uint64, dp dataProcessor) {
 				continue
 			}
 
-			if sta[name] == nil {
-				sta[name] = station.NewAccumulatorFloat(val)
+			s, _ := sta.Load(name)
+			if s == nil {
+				sta.Store(name, station.NewAccumulatorFloat(val))
 			} else {
-				sta[name].AddSample(val)
+				s.(*station.AccumulatorFloat).AddSample(val)
 			}
 		}
-
-		dp.refined <- sta
 	}
 	dp.group.Done()
 }
